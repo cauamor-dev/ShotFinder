@@ -70,4 +70,4 @@ Este projeto é open source, sob a licença MIT.
 
 ---
 
-Desenvolvido com ❤️ por [Seu Nome]. 
+Desenvolvido por Cauã Moreira.
