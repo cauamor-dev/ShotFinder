@@ -1,6 +1,8 @@
 import React, { useState, useRef } from 'react';
 import './App.css';
 
+const API_BASE_URL = (process.env.REACT_APP_API_URL || 'http://localhost:5000').replace(/\/$/, '');
+
 const texts = {
   pt: {
     title: 'ShotFinder',
@@ -82,7 +84,7 @@ function App() {
     setResults(null);
     saveHistory(sceneText, lang);
     try {
-      const response = await fetch('http://localhost:5000/search', {
+      const response = await fetch(`${API_BASE_URL}/search`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: sceneText, lang })
@@ -115,13 +117,11 @@ function App() {
       return;
     }
     try {
-      const apiKey = '1e4f2bba1d1f7d5d4bd02c188b8d848a'; // Use sua chave TMDb
-      const language = lang === 'en' ? 'en-US' : 'pt-BR';
-      const url = `https://api.themoviedb.org/3/search/multi?api_key=${apiKey}&language=${language}&query=${encodeURIComponent(query)}`;
+      const url = `${API_BASE_URL}/suggestions?text=${encodeURIComponent(query)}&lang=${lang}`;
       const res = await fetch(url);
       const data = await res.json();
-      if (data && data.results) {
-        setSuggestions(data.results.filter(r => (r.title || r.name)).slice(0, 6));
+      if (res.ok && Array.isArray(data)) {
+        setSuggestions(data);
       } else {
         setSuggestions([]);
       }
@@ -285,7 +285,7 @@ function App() {
             </div>
           )}
           {results.map((item) => (
-            <div key={item.id} className="result-card">
+            <div key={`${item.media_type}:${item.id}`} className="result-card">
               <img src={item.poster} alt={item.title} />
               <div className="result-info">
                 <h3>{item.title} {item.year && <span style={{ color: '#64748b', fontWeight: 400 }}>({item.year})</span>}</h3>
