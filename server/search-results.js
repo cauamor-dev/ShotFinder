@@ -4,8 +4,9 @@ export function selectTitles(items, limit = 5) {
   const selected = [];
   for (const item of items) {
     if (!item || !Number.isInteger(item.id) || item.id <= 0) continue;
-    const mediaType = item.media_type || (item.title ? 'movie' : item.name ? 'tv' : null);
-    if (mediaType !== 'movie' && mediaType !== 'tv') continue;
+    const mediaType =
+      item.media_type || (item.title ? "movie" : item.name ? "tv" : null);
+    if (mediaType !== "movie" && mediaType !== "tv") continue;
     const key = `${mediaType}:${item.id}`;
     if (seen.has(key)) continue;
     seen.add(key);

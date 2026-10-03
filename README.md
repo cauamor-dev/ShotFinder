@@ -1,99 +1,113 @@
 # ShotFinder
 
-Movie and TV discovery with React, Node.js and external catalog APIs. Search by title or text, inspect cast and synopsis, and find subscription streaming links for Brazil.
+Find films and series, keep a watchlist, and see where to watch in Brazil.
 
-**Status:** portfolio prototype. Text discovery uses keyword extraction and TMDb search/discovery; this version does not implement an LLM, RAG or reliable scene recognition. Streaming availability depends on Watchmode data and API limits.
+React + Vite on the frontend. Node.js + Express on the backend. TMDb provides the catalog; Watchmode provides streaming availability.
 
 ## Features
 
-- Portuguese and English interface, light/dark themes and local search history.
-- Autocomplete through the backend: API keys stay on the server.
-- Movie/TV deduplication by media type and ID, excluding person records.
-- Cast, poster, overview and subscription streaming sources in Brazil.
-- Automated backend tests with mocked external providers.
+- Title search with debounced, keyboard-accessible autocomplete.
+- Optional keyword discovery for short clues, across films and TV.
+- Portuguese and English, light and dark themes, responsive layouts.
+- Watchlist and recent searches stored locally in the browser.
+- Title details, cast, ratings and Brazilian subscription, free, rental and purchase offers.
+- Provider details loaded only on demand, with timeouts and bounded in-memory caches.
+
+Clue search uses catalog keywords, not an AI model or image recognition. It works best with short English keywords; results are suggestions, not guaranteed scene matches. Watchlist data is local to each browser and does not sync across devices.
 
 ## Run locally
 
-Requirements: Node.js 22 or newer, npm, TMDb and Watchmode API accounts.
+Use Node.js **22.12+** or **24 LTS**.
 
-```bash
-git clone https://github.com/cauamor-dev/ShotFinder.git
-cd ShotFinder/server
-npm ci
-cp .env.example .env
+1. Copy `server/.env.example` to `server/.env` and enter your keys:
+
+```env
+TMDB_API_KEY=your_tmdb_v3_key
+WATCHMODE_API_KEY=your_watchmode_key
+PORT=5000
 ```
 
-Set `TMDB_API_KEY` and `WATCHMODE_API_KEY` in `server/.env`, then run:
+2. In a terminal in `server`:
 
-```bash
-npm start
-```
-
-In a second terminal:
-
-```bash
-cd ShotFinder/client
+```sh
 npm ci
 npm start
 ```
 
-Backend: `http://localhost:5000`. Frontend: `http://localhost:3000`.
-For another backend URL, copy `client/.env.example` to `client/.env` and set `REACT_APP_API_URL`; restart the development server or rebuild the client. **Never put provider keys in React environment variables.**
+3. In another terminal in `client`:
 
-On Windows, replace `cp` with `Copy-Item` in PowerShell or copy the file manually.
-
-## Verify
-
-```bash
-cd server
-npm test
+```sh
+npm ci
+npm start
 ```
 
-Tests exercise title identity, duplicate removal, invalid input, configuration errors, autocomplete, credits endpoint selection and provider failure responses. They do not require real API keys or contact the providers.
+Open **http://localhost:3000**. Keep both terminals running. The frontend forwards `/api` requests to port 5000, so no client configuration is needed locally. Never add private keys to client files or commit `.env`.
 
-```bash
+If the API is hosted elsewhere, set `VITE_API_URL` in `client/.env` before building. The value is public and must contain only the API address. Set `CLIENT_ORIGIN` on the server to the exact allowed frontend origin (comma-separated for multiple origins). Behind a reverse proxy, configure proxy trust for that specific environment before relying on client IP rate limits.
+
+## Production build
+
+```sh
 cd client
+npm ci
 npm run build
+cd ../server
+npm ci
+npm start
 ```
 
-GitHub Actions runs backend tests when this workflow is added to the repository. Frontend visual behavior and real-provider integration still need manual verification with replacement API keys.
+The server serves the built frontend at **http://localhost:5000** and the API at `/api`. Configure the production origin and HTTPS with your host. A public service needs abuse monitoring and a shared cache/rate-limit store if it runs on multiple instances; current limits and caches are per process.
+
+## Checks
+
+```sh
+npm test --prefix server
+npm test --prefix client
+npm run build --prefix client
+npm audit --prefix server
+npm audit --prefix client
+```
+
+GitHub Actions runs tests, builds the frontend and audits dependencies on pushes and pull requests. Provider calls are mocked in automated tests: they do not prove live key validity or account permissions.
 
 ## API
 
-| Endpoint | Input | Output |
-| --- | --- | --- |
-| `POST /search` | JSON `{ "text": "Interstellar", "lang": "en" }` | Up to five titles with `id`, `media_type`, title, year, overview, poster, cast and streaming |
-| `GET /suggestions?text=space&lang=en` | Search text, optional language | Up to six movie/TV catalog records |
+| Method | Endpoint                            | Purpose                                                     |
+| ------ | ----------------------------------- | ----------------------------------------------------------- |
+| GET    | `/api/health`                       | Server status; does not check provider credentials          |
+| GET    | `/api/suggestions?text=...&lang=pt` | Autocomplete                                                |
+| POST   | `/api/search`                       | `{ "text": "Interstellar", "lang": "en", "mode": "title" }` |
+| GET    | `/api/titles/movie/157336?lang=pt`  | Details and Brazil streaming options                        |
 
-Short autocomplete inputs return an empty array. Non-string search input and text over 500 characters return HTTP 400. Provider failures during autocomplete return HTTP 502.
+`mode` accepts `title` or `scene`; `lang` accepts `pt` or `en`; media types are `movie` and `tv`. The original `/search` and `/suggestions` routes remain available. Search now returns catalog cards; cast and streaming are returned by the details endpoint.
 
-## Architecture and limitations
+Search and autocomplete are cached for 5 minutes. Streaming results are cached for 1 hour. Searches do not call Watchmode; opening a title makes one sources request using its exact TMDb identity, which Watchmode may charge as multiple credits. Failed streaming calls are shown separately from valid empty results and are not cached. Search inputs are limited to 500 characters and API traffic to 60 requests/minute/IP.
 
-React → Express → TMDb / Watchmode. Preferences and history remain in browser localStorage. Watchmode results are cached in process memory; this is not persistent storage.
+## Structure
 
-The React client currently uses Create React App. There is no authentication, per-user rate limiting, durable cache or validated production deployment. Long descriptions can generate multiple provider requests; provider quotas and partial failures need attention before a public launch.
+```text
+client/src/App.jsx          Search, filters and watchlist
+client/src/components/     Title cards, details dialog and icons
+client/src/i18n.js          Interface text
+client/src/storage.js       Safe browser persistence
+server/index.js            Routes, validation and middleware
+server/catalog.js          Provider integration
+server/cache.js            Bounded cache with expiration
+server/test/               API and provider regression tests
+```
 
-If credentials have previously been committed, revoke/replace them with the providers. Removing keys from current files does not erase Git history. Install dependencies with `npm ci`; do not commit `node_modules`.
+## Credits
+
+This product uses the TMDB API but is not endorsed or certified by TMDB. Streaming availability is provided by Watchmode and may change. No video is hosted or played by ShotFinder. DM Sans and Instrument Serif are distributed under the SIL Open Font License; license files are included with the self-hosted fonts.
 
 ---
 
-<details>
-<summary>Português</summary>
+## Português
 
-## Sobre o projeto
+O ShotFinder busca filmes e séries, guarda uma lista local e consulta onde assistir no Brasil. A busca por pistas usa palavras-chave do catálogo; não é reconhecimento de cenas com IA.
 
-Protótipo Full Stack para descoberta de filmes e séries, com React, Node.js/Express, TMDb e Watchmode. A busca usa texto e extração simples de palavras-chave; não há LLM, RAG ou reconhecimento confiável de cenas nesta versão.
+Para rodar: configure `server/.env`, execute `npm ci` e `npm start` em `server`, depois os mesmos comandos em `client`. Abra **http://localhost:3000**. As duas janelas precisam ficar abertas.
 
-O autocomplete consulta o backend, mantendo as chaves no servidor. Filmes e séries com o mesmo ID são preservados como títulos distintos, e registros de pessoas são excluídos.
+Os detalhes e as plataformas são consultados ao abrir um título. Erros de chave, cota ou serviço são diferentes de um resultado válido sem plataformas. Favoritos e histórico ficam apenas no navegador usado.
 
-## Executar e testar
-
-Use Node.js 22 ou superior. Em `server`, execute `npm ci`, copie `.env.example` para `.env`, preencha as duas chaves de API e execute `npm start`. Em outro terminal, entre em `client`, execute `npm ci` e `npm start`.
-
-Backend na porta 5000; frontend na porta 3000. Para outra URL de backend, configure `REACT_APP_API_URL` no `.env` do cliente. Não coloque chaves de provedores no React.
-
-Execute `npm test` em `server` e `npm run build` em `client`. Os testes de backend simulam os provedores externos. A interface e as integrações reais precisam de verificação manual com novas chaves.
-
-Se as chaves já foram publicadas, substitua-as nos provedores: retirar do código atual não apaga o histórico do Git. Não versione `node_modules`.
-
-</details>
+Ao atualizar uma cópia antiga, guarde o seu `server/.env`, extraia a nova versão em outra pasta, copie somente esse arquivo para a nova pasta `server` e reinstale as dependências nas duas partes. Não reutilize a pasta `node_modules` antiga.
